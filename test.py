@@ -40,6 +40,12 @@ class Cube:
         self.edge_pos     = edge_pos
         self.edge_twist   = edge_twist
 
+    def set_state(self, corner_pos, corner_twist, edge_pos, edge_twist):
+        self.corner_pos   = corner_pos
+        self.corner_twist = corner_twist
+        self.edge_pos     = edge_pos
+        self.edge_twist   = edge_twist
+
     def move(self, move):
         for i in range(len(move)):
             corner_perm = []
@@ -156,6 +162,8 @@ MOVES = [ "Up", "U", "Rp", "R", "Fp", "F", "Dp", "D", "Lp", "L", "Bp", "B" ];
 MSG_CUBE_STATE = [4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 MSG_BATTERY_STATE = [9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 
+cube = Cube([0,1,2,3,4,5,6,7],[0,0,0,0,0,0,0,0],[0,1,2,3,4,5,6,7,8,9,10,11],[0,0,0,0,0,0,0,0,0,0,0,0])
+
 
 
 def decrypt(value):
@@ -219,16 +227,28 @@ def decode_move(value):
     i = 1;
     move_num = extract_bits(value, 12 + i * 5, 5)
     move_time = extract_bits(value, 12 + 7 * 5 + i * 16, 16)
-    print(MOVES[move_num])
+    return MOVES[move_num]
 
 def notification_handler(sender, data):
     data = decrypt(data)
     message_type = extract_bits(data, 0, 4);
     if (message_type == 2) :
-        decode_move(data)
+        # move_count = extract_bits(data, 4, 8)
+        move_count = 1
+        for j in range(move_count):
+            i = (move_count - 1) - j
+            move_num = extract_bits(data, 12 + i * 5, 5)
+            # move_time = extract_bits(data, 12 + 7 * 5 + i * 16, 16)
+            # print(move_num)
+            move = MOVES[move_num]
+            # print(move)
+            cube.move([move])
+            cube.print_state()
     elif (message_type == 4) :
-        decode_corners(data)
-        decode_edges(data)
+        [corner_pos, corner_twist] = decode_corners(data)
+        [edge_pos, edge_twist] = decode_edges(data)
+        cube.set_state(corner_pos, corner_twist, edge_pos, edge_twist)
+        cube.print_state()
     elif (message_type == 9) :
         decode_battery_state(data)
 
@@ -252,8 +272,9 @@ def decode_corners(value):
         corners_left.remove(corners[i])
     corners[7] = corners_left[0]
     corner_twist[7] = (3 - total_corner_twist % 3) % 3
-    print(corners)
-    print(corner_twist)
+    # print(corners)
+    # print(corner_twist)
+    return corners, corner_twist
 
 def decode_edges(value):
     # Decode edges. There are only 11 in the packet because the
@@ -269,8 +290,9 @@ def decode_edges(value):
         edges_left.remove(edges[i])
     edges[11] = edges_left[0]
     edge_parity[11] = total_edge_parity & 1
-    print(edges)
-    print(edge_parity)
+    return edges, edge_parity
+    # print(edges)
+    # print(edge_parity)
 
 async def run(address, debug=False):
     log = logging.getLogger(__name__)
@@ -301,9 +323,8 @@ if __name__ == "__main__":
     #Run notify event
     loop = asyncio.get_event_loop()
     loop.set_debug(True)
-    A = Cube([0,1,2,3,4,5,6,7],[0,0,0,0,0,0,0,0],[0,1,2,3,4,5,6,7,8,9,10,11],[0,0,0,0,0,0,0,0,0,0,0,0])
-    A.move(["L", "U", "Lp", "Up", "B", "R", "Up", "D"])
-    A.print_state()
+    # A.move(["L", "U", "Lp", "Up", "B", "R", "Up", "D"])
+    # A.print_state()
     # A.move(["Up"])
     # A.print_state()
     loop.run_until_complete(run(address, True))
