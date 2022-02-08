@@ -17,6 +17,119 @@ from Crypto.Cipher import AES
 #         if move == "U":
 #             self.
 
+# Top   | Bottom
+
+# 2   3 | 6   7
+#   W   |   W
+# 1   0 | 5   4
+#   G   |   G
+#
+# Top   | Bottom | Middle
+
+#   3   |   7    | 10   11
+# 2 W 0 | 6 W 4  |    W
+#   1   |   5    |  9    8
+#   G   |   G    |    G
+#
+
+class Cube:
+
+    def __init__(self, corner_pos, corner_twist, edge_pos, edge_twist):
+        self.corner_pos   = corner_pos
+        self.corner_twist = corner_twist
+        self.edge_pos     = edge_pos
+        self.edge_twist   = edge_twist
+
+    def move(self, move):
+        for i in range(len(move)):
+            corner_perm = []
+            edge_perm = []
+            twist_corners = False
+            twist_edges = False
+            if (move[i] == "U" or move[i] == "Up"):
+                corner_perm   = [ 0, 1, 2, 3]
+                edge_perm     = [ 0, 1, 2, 3]
+                twist_corners = False
+                twist_edges   = False
+            elif (move[i] == "D" or move[i] == "Dp"):
+                corner_perm   = [ 4, 7, 6, 5]
+                edge_perm     = [ 4, 7, 6, 5]
+                twist_corners = False
+                twist_edges   = False
+            elif (move[i] == "R" or move[i] == "Rp"):
+                corner_perm   = [  3, 7, 4, 0]
+                edge_perm     = [ 11, 4, 8, 0]
+                twist_corners = True
+                twist_edges   = False
+            elif (move[i] == "L" or move[i] == "Lp"):
+                corner_perm   = [ 1, 5, 6, 2]
+                edge_perm     = [ 2, 9, 6,10]
+                twist_corners = True
+                twist_edges   = False
+            elif (move[i] == "F" or move[i] == "Fp"):
+                corner_perm   = [ 0, 4, 5, 1]
+                edge_perm     = [ 1, 8, 5, 9]
+                twist_corners = True
+                twist_edges   = True
+            elif (move[i] == "B" or move[i] == "Bp"):
+                corner_perm   = [ 2, 6, 7, 3]
+                edge_perm     = [10, 7,11, 3]
+                twist_corners = True
+                twist_edges   = True
+
+            if (len(move[i]) == 1):
+                self.permute_cwise(self.corner_pos, corner_perm)
+                self.permute_cwise(self.corner_twist, corner_perm)
+                self.permute_cwise(self.edge_pos, edge_perm)
+                self.permute_cwise(self.edge_twist, edge_perm)
+            else:
+                self.permute_ccwise(self.corner_pos, corner_perm)
+                self.permute_ccwise(self.corner_twist, corner_perm)
+                self.permute_ccwise(self.edge_pos, edge_perm)
+                self.permute_ccwise(self.edge_twist, edge_perm)
+
+            if (twist_corners):
+                self.twist_corners(self.corner_twist, corner_perm)
+
+            if (twist_edges):
+                self.twist_edges(self.edge_twist, edge_perm)
+
+    def permute_cwise(self, vec, perm_indices):
+        buffer = vec[perm_indices[3]]
+        for i in [3,2,1]:
+            vec[perm_indices[i]] = vec[perm_indices[i-1]]
+        vec[perm_indices[0]] = buffer
+        return vec
+
+    def permute_ccwise(self, vec, perm_indices):
+        buffer = vec[perm_indices[0]]
+        for i in [0,1,2]:
+            vec[perm_indices[i]] = vec[perm_indices[i+1]]
+        vec[perm_indices[3]] = buffer
+        return vec
+
+    def twist_corners(self, vec, perm_indices):
+        vec[perm_indices[0]] = (vec[perm_indices[0]] + 1) % 3
+        vec[perm_indices[1]] = (vec[perm_indices[1]] + 2) % 3
+        vec[perm_indices[2]] = (vec[perm_indices[2]] + 1) % 3
+        vec[perm_indices[3]] = (vec[perm_indices[3]] + 2) % 3
+        return vec
+
+    def twist_edges(self, vec, perm_indices):
+        vec[perm_indices[0]] = (vec[perm_indices[0]] + 1) % 2
+        vec[perm_indices[1]] = (vec[perm_indices[1]] + 1) % 2
+        vec[perm_indices[2]] = (vec[perm_indices[2]] + 1) % 2
+        vec[perm_indices[3]] = (vec[perm_indices[3]] + 1) % 2
+        return vec
+
+    def print_state(self):
+        print(self.corner_pos)
+        print(self.corner_twist)
+        print(self.edge_pos)
+        print(self.edge_twist)
+
+
+
 address = "AB:12:34:01:42:00"
 device_key = [0x00, 0x42, 0x01, 0x34, 0x12, 0xab]
 
@@ -120,7 +233,6 @@ def notification_handler(sender, data):
         decode_battery_state(data)
 
     # print(', '.join('{:02x}'.format(x) for x in data))
-    # decode_move(data)
 
 def decode_battery_state(value):
     percent = extract_bits(value, 8, 8)
@@ -177,10 +289,9 @@ async def run(address, debug=False):
         await client.start_notify(UUID_LISTEN, notification_handler)
 
         # get initial cube state
-        await client.write_gatt_char(UUID_WRITE, encrypt(MSG_BATTERY_STATE))
         await client.write_gatt_char(UUID_WRITE, encrypt(MSG_CUBE_STATE))
-
-        await asyncio.sleep(5.0)
+        await client.write_gatt_char(UUID_WRITE, encrypt(MSG_BATTERY_STATE))
+        await asyncio.sleep(8.0)
 
         await client.stop_notify(UUID_LISTEN)
 
@@ -190,4 +301,9 @@ if __name__ == "__main__":
     #Run notify event
     loop = asyncio.get_event_loop()
     loop.set_debug(True)
+    A = Cube([0,1,2,3,4,5,6,7],[0,0,0,0,0,0,0,0],[0,1,2,3,4,5,6,7,8,9,10,11],[0,0,0,0,0,0,0,0,0,0,0,0])
+    A.move(["L", "U", "Lp", "Up", "B", "R", "Up", "D"])
+    A.print_state()
+    # A.move(["Up"])
+    # A.print_state()
     loop.run_until_complete(run(address, True))
