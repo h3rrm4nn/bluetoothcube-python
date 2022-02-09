@@ -45,33 +45,41 @@ class Cube:
             twist_edges = False
             # TODO:
             if (move[i] == "U" or move[i] == "Up"):
-                corner_perm   = [ 1, 2, 3, 0]
-                edge_perm     = [ 1, 2, 3, 0]
+                corner_perm   = [ 0, 1, 2, 3]
+                edge_perm     = [ 0, 1, 2, 3]
                 twist_corners = False
                 twist_edges   = False
             elif (move[i] == "D" or move[i] == "Dp"):
-                corner_perm   = [ 7, 6, 5, 4]
-                edge_perm     = [ 7, 6, 5, 4]
+                corner_perm   = [ 4, 7, 6, 5]
+                edge_perm     = [ 4, 7, 6, 5]
                 twist_corners = False
                 twist_edges   = False
             elif (move[i] == "R" or move[i] == "Rp"):
                 corner_perm   = [  3, 7, 4, 0]
                 edge_perm     = [ 11, 4, 8, 0]
+                # corner_perm   = [ 4, 7, 3, 0]
+                # edge_perm     = [ 8, 4,11, 0]
                 twist_corners = True
                 twist_edges   = False
             elif (move[i] == "L" or move[i] == "Lp"):
-                corner_perm   = [ 5, 6, 2, 1]
-                edge_perm     = [ 9, 6,10, 2]
+                corner_perm   = [ 6, 2, 1, 5]
+                edge_perm     = [ 6,10, 2, 9]
+                # corner_perm   = [ 1, 2, 6, 5]
+                # edge_perm     = [ 2,10, 6, 9]
                 twist_corners = True
                 twist_edges   = False
             elif (move[i] == "F" or move[i] == "Fp"):
                 corner_perm   = [ 0, 4, 5, 1]
                 edge_perm     = [ 1, 8, 5, 9]
+                # corner_perm   = [ 5, 4, 0, 1]
+                # edge_perm     = [ 5, 8, 1, 9]
                 twist_corners = True
                 twist_edges   = True
             elif (move[i] == "B" or move[i] == "Bp"):
-                corner_perm   = [6, 7, 3, 2]
-                edge_perm     = [7,11, 3,10]
+                corner_perm   = [ 7, 3, 2, 6]
+                edge_perm     = [11, 3,10, 7]
+                # corner_perm   = [ 2, 3, 7, 6]
+                # edge_perm     = [10, 3,11, 7]
                 twist_corners = True
                 twist_edges   = True
 
@@ -93,17 +101,17 @@ class Cube:
                 self.twist_edges(self.edge_twist, edge_perm)
 
     def permute_cwise(self, vec, perm_indices):
-        buffer = vec[perm_indices[3]]
-        for i in [3,2,1]:
-            vec[perm_indices[i]] = vec[perm_indices[i-1]]
-        vec[perm_indices[0]] = buffer
-        return vec
-
-    def permute_ccwise(self, vec, perm_indices):
         buffer = vec[perm_indices[0]]
         for i in [0,1,2]:
             vec[perm_indices[i]] = vec[perm_indices[i+1]]
         vec[perm_indices[3]] = buffer
+        return vec
+
+    def permute_ccwise(self, vec, perm_indices):
+        buffer = vec[perm_indices[3]]
+        for i in [3,2,1]:
+            vec[perm_indices[i]] = vec[perm_indices[i-1]]
+        vec[perm_indices[0]] = buffer
         return vec
 
     def twist_corners(self, vec, perm_indices):
@@ -238,7 +246,6 @@ class Bluetooth_cube:
                     # move_time = self.extract_bits(data, 12 + 7 * 5 + i * 16, 16)
                     move = self.MOVES[move_num]
                     self.cube.move([move])
-                    self.cube.print_state()
         elif (message_type == 4) :
             self.move_count = self.extract_bits(data, 4, 8)
             self.cube_initialized = True
@@ -295,7 +302,7 @@ async def run(bt_cube, debug=False):
         # get initial cube state
         await client.write_gatt_char(bt_cube.UUID_WRITE, bt_cube.encrypt(bt_cube.MSG_CUBE_STATE))
         await client.write_gatt_char(bt_cube.UUID_WRITE, bt_cube.encrypt(bt_cube.MSG_BATTERY_STATE))
-        await asyncio.sleep(20.0)
+        await asyncio.sleep(50.0)
 
         await client.stop_notify(bt_cube.UUID_LISTEN)
 
@@ -306,3 +313,4 @@ if __name__ == "__main__":
     loop.set_debug(True)
     bt_cube = Bluetooth_cube()
     loop.run_until_complete(run(bt_cube, True))
+    bt_cube.cube.print_state()
