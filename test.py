@@ -174,7 +174,8 @@ class Bluetooth_cube:
         self.MSG_BATTERY_STATE = [9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 
         # Init virtual cube
-        self.cube = Cube([0,1,2,3,4,5,6,7],[0,0,0,0,0,0,0,0],[0,1,2,3,4,5,6,7,8,9,10,11],[0,0,0,0,0,0,0,0,0,0,0,0])
+        self.solved_state = [[0,1,2,3,4,5,6,7],[0,0,0,0,0,0,0,0],[0,1,2,3,4,5,6,7,8,9,10,11],[0,0,0,0,0,0,0,0,0,0,0,0]]
+        self.cube = Cube(self.solved_state[0],self.solved_state[1],self.solved_state[2],self.solved_state[3])
 
         self.move_count = 0;
         self.cube_initialized = False;
@@ -252,7 +253,7 @@ class Bluetooth_cube:
             [corner_pos, corner_twist] = self.decode_corners(data)
             [edge_pos, edge_twist] = self.decode_edges(data)
             self.cube.set_state(corner_pos, corner_twist, edge_pos, edge_twist)
-            self.cube.print_state()
+            # self.cube.print_state()
         elif (message_type == 9) :
             self.decode_battery_state(data)
 
@@ -292,17 +293,34 @@ class Bluetooth_cube:
         edge_parity[11] = total_edge_parity & 1
         return edges, edge_parity
 
+    def is_solved(self):
+        corners_solved = (self.cube.corner_pos == self.solved_state[0]) and (self.cube.corner_twist ==
+                self.solved_state[1])
+        edges_solved = (self.cube.edge_pos == self.solved_state[2]) and (self.cube.edge_twist ==
+                self.solved_state[3])
+        if (corners_solved and edges_solved):
+            return True
+        else:
+            return False
+
+
 async def run(bt_cube, debug=False):
 
     async with BleakClient(bt_cube.address) as client:
-        x = await client.is_connected()
+        # x = await client.is_connected()
 
         await client.start_notify(bt_cube.UUID_LISTEN, bt_cube.notification_handler)
 
         # get initial cube state
         await client.write_gatt_char(bt_cube.UUID_WRITE, bt_cube.encrypt(bt_cube.MSG_CUBE_STATE))
         await client.write_gatt_char(bt_cube.UUID_WRITE, bt_cube.encrypt(bt_cube.MSG_BATTERY_STATE))
-        await asyncio.sleep(50.0)
+        for i in range(40):
+            await asyncio.sleep(1)
+            if (bt_cube.is_solved()):
+                print("Cube solved!")
+                break
+        # await asyncio.sleep(1)
+        # print(bt_cube.is_solved())
 
         await client.stop_notify(bt_cube.UUID_LISTEN)
 
@@ -313,4 +331,4 @@ if __name__ == "__main__":
     loop.set_debug(True)
     bt_cube = Bluetooth_cube()
     loop.run_until_complete(run(bt_cube, True))
-    bt_cube.cube.print_state()
+    # bt_cube.cube.print_state()
