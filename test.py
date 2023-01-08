@@ -166,12 +166,16 @@ class Bluetooth_cube:
 
         # Move mapping for GAN cube
         self.MOVES = [ "Up", "U", "Rp", "R", "Fp", "F", "Dp", "D", "Lp", "L", "Bp", "B" ];
+        # self.MOVES = [ "U", "Up", "R", "Rp", "F", "Fp", "D", "Dp", "L", "Lp", "B", "Bp" ];
 
         # Write message to initialize cube state reply
         self.MSG_CUBE_STATE = [4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 
         # Write message to initialize battery state reply
         self.MSG_BATTERY_STATE = [9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+
+        # Write message to initialize a reset of the cube
+        self.MSG_RESET_CUBE_STATE = [10, 0x05, 0x39, 0x77, 0x00, 0x00, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
 
         # Init virtual cube
         self.solved_state = [[0,1,2,3,4,5,6,7],[0,0,0,0,0,0,0,0],[0,1,2,3,4,5,6,7,8,9,10,11],[0,0,0,0,0,0,0,0,0,0,0,0]]
@@ -230,32 +234,39 @@ class Bluetooth_cube:
             bit = start + i
             result = result << 1
             if data[bit // 8] & (1 << (7 - (bit % 8))) != 0:
-                result |= 1;
+                result |= 1
         return result
 
     def notification_handler(self, sender, data):
         data = self.decrypt(data)
-        message_type = self.extract_bits(data, 0, 4);
-        if (message_type == 2) :
-            if (self.cube_initialized):
-                current_move_count = self.extract_bits(data, 4, 8)
-                move_count = current_move_count - self.move_count
-                self.move_count = current_move_count
-                for j in range(move_count):
-                    i = (move_count - 1) - j
-                    move_num = self.extract_bits(data, 12 + i * 5, 5)
-                    # move_time = self.extract_bits(data, 12 + 7 * 5 + i * 16, 16)
-                    move = self.MOVES[move_num]
-                    self.cube.move([move])
-        elif (message_type == 4) :
-            self.move_count = self.extract_bits(data, 4, 8)
-            self.cube_initialized = True
-            [corner_pos, corner_twist] = self.decode_corners(data)
-            [edge_pos, edge_twist] = self.decode_edges(data)
-            self.cube.set_state(corner_pos, corner_twist, edge_pos, edge_twist)
-            # self.cube.print_state()
-        elif (message_type == 9) :
-            self.decode_battery_state(data)
+        message_type = self.extract_bits(data, 0, 4)
+        match message_type:
+            case 2:
+                if (self.cube_initialized):
+                    current_move_count = self.extract_bits(data, 4, 8)
+                    move_count = current_move_count - self.move_count
+                    self.move_count = current_move_count
+                    for j in range(move_count):
+                        i = (move_count - 1) - j
+                        move_num = self.extract_bits(data, 12 + i * 5, 5)
+                        # move_time = self.extract_bits(data, 12 + 7 * 5 + i * 16, 16)
+                        move = self.MOVES[move_num]
+                        self.cube.move([move])
+                        # print(move)
+            case 4:
+                self.move_count = self.extract_bits(data, 4, 8)
+                self.cube_initialized = True
+                [corner_pos, corner_twist] = self.decode_corners(data)
+                [edge_pos, edge_twist] = self.decode_edges(data)
+                self.cube.set_state(corner_pos, corner_twist, edge_pos, edge_twist)
+                self.cube.print_state()
+            case 9:
+                self.decode_battery_state(data)
+            case other:
+                print("Received invalid message of type: ", str(message_type))
+        # elif (message_type == 10) :
+        #     print("Cube reset.")
+
 
     def decode_battery_state(self, value):
         percent = self.extract_bits(value, 8, 8)
@@ -307,18 +318,43 @@ class Bluetooth_cube:
 async def run(bt_cube, debug=False):
 
     async with BleakClient(bt_cube.address) as client:
-        # x = await client.is_connected()
+        connected = await client.is_connected()
+        if (connected):
+            print("Connection to cube established.")
+            # get initial cube state
+            # await client.write_gatt_char(bt_cube.UUID_WRITE, bt_cube.encrypt(bt_cube.MSG_CUBE_STATE))
+            # await client.write_gatt_char(bt_cube.UUID_WRITE, bt_cube.encrypt(bt_cube.MSG_BATTERY_STATE))
 
         await client.start_notify(bt_cube.UUID_LISTEN, bt_cube.notification_handler)
+        # await client.write_gatt_char(bt_cube.UUID_WRITE, bt_cube.encrypt(bt_cube.MSG_CUBE_STATE))
 
-        # get initial cube state
-        await client.write_gatt_char(bt_cube.UUID_WRITE, bt_cube.encrypt(bt_cube.MSG_CUBE_STATE))
-        await client.write_gatt_char(bt_cube.UUID_WRITE, bt_cube.encrypt(bt_cube.MSG_BATTERY_STATE))
-        for i in range(40):
+
+        while (True):
+            command = input("Enter what you want to do:\n (1) Show cube state.\n (2) Show battery state.\n (3) Sync cube (reset to solved state).\n (4) Play 40s.\n (5) Quit.\n")
+            match command:
+                case '1':
+                    await client.write_gatt_char(bt_cube.UUID_WRITE, bt_cube.encrypt(bt_cube.MSG_CUBE_STATE))
+                case '2':
+                    await client.write_gatt_char(bt_cube.UUID_WRITE, bt_cube.encrypt(bt_cube.MSG_BATTERY_STATE))
+                case '3':
+                    await client.write_gatt_char(bt_cube.UUID_WRITE, bt_cube.encrypt(bt_cube.MSG_RESET_CUBE_STATE))
+                case '4':
+                    await asyncio.sleep(40)
+                    # for i in range(40) :
+                    #     await asyncio.sleep(1)
+                    #     print(i)
+                    bt_cube.cube.print_state()
+                case '5':
+                    break
+                case _:
+                    print('Invalid command.')
             await asyncio.sleep(1)
-            if (bt_cube.is_solved()):
-                print("Cube solved!")
-                break
+
+        # for i in range(40):
+        #     await asyncio.sleep(1)
+        #     if (bt_cube.is_solved()):
+        #         print("Cube solved!")
+        #         break
         # await asyncio.sleep(1)
         # print(bt_cube.is_solved())
 
@@ -327,8 +363,8 @@ async def run(bt_cube, debug=False):
 if __name__ == "__main__":
 
     #Run notify event
-    loop = asyncio.get_event_loop()
-    loop.set_debug(True)
+    # loop = asyncio.get_event_loop()
+    # loop.set_debug(True)
     bt_cube = Bluetooth_cube()
-    loop.run_until_complete(run(bt_cube, True))
+    asyncio.run(run(bt_cube, True))
     # bt_cube.cube.print_state()
